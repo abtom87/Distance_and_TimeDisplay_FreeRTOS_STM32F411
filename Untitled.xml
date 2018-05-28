@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cdtprojectproperties>
+<section name="org.eclipse.cdt.internal.ui.wizards.settingswizards.IncludePaths">
+<language name="S">
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS/portable/GCC</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS/include</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS/portable/MemMang</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/config</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS/portable/GCC/ARM_CM4F</includepath>
+<includepath>${ProjDirPath}/StdPeriph_Driver/inc</includepath>
+<includepath>${ProjDirPath}/inc</includepath>
+<includepath>${ProjDirPath}/CMSIS/device</includepath>
+<includepath>${ProjDirPath}/CMSIS/core</includepath>
+
+</language>
+<language name="C Source File">
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS/portable/GCC</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS/include</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS/portable/MemMang</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/config</includepath>
+<includepath>/home/abel/Ac6/SystemWorkbench/FreeRTOS_Demo1/FreeRTOS/portable/GCC/ARM_CM4F</includepath>
+<includepath>${ProjDirPath}/StdPeriph_Driver/inc</includepath>
+<includepath>${ProjDirPath}/inc</includepath>
+<includepath>${ProjDirPath}/CMSIS/device</includepath>
+<includepath>${ProjDirPath}/CMSIS/core</includepath>
+
+</language>
+<language name="Object File">
+
+</language>
+<language name="Assembly Source File">
+<includepath>${ProjDirPath}/StdPeriph_Driver/inc</includepath>
+<includepath>${ProjDirPath}/inc</includepath>
+<includepath>${ProjDirPath}/CMSIS/device</includepath>
+<includepath>${ProjDirPath}/CMSIS/core</includepath>
+
+</language>
+<language name="s">
+<includepath>${ProjDirPath}/StdPeriph_Driver/inc</includepath>
+<includepath>${ProjDirPath}/inc</includepath>
+<includepath>${ProjDirPath}/CMSIS/device</includepath>
+<includepath>${ProjDirPath}/CMSIS/core</includepath>
+
+</language>
+</section>
+<section name="org.eclipse.cdt.internal.ui.wizards.settingswizards.Macros">
+<language name="S">
+<macro>
+<name>STM32</name><value/>
+</macro>
+<macro>
+<name>STM32F4</name><value/>
+</macro>
+<macro>
+<name>STM32F411VETx</name><value/>
+</macro>
+<macro>
+<name>STM32F411E_DISCO</name><value/>
+</macro>
+<macro>
+<name>STM32F411xE</name><value/>
+</macro>
+<macro>
+<name>USE_STDPERIPH_DRIVER</name><value/>
+</macro>
+
+</language>
+<language name="C Source File">
+<macro>
+<name>STM32</name><value/>
+</macro>
+<macro>
+<name>STM32F4</name><value/>
+</macro>
+<macro>
+<name>STM32F411VETx</name><value/>
+</macro>
+<macro>
+<name>STM32F411E_DISCO</name><value/>
+</macro>
+<macro>
+<name>STM32F411xE</name><value/>
+</macro>
+<macro>
+<name>USE_STDPERIPH_DRIVER</name><value/>
+</macro>
+
+</language>
+<language name="Object File">
+
+</language>
+<language name="Assembly Source File">
+
+</language>
+<language name="s">
+
+</language>
+</section>
+</cdtprojectproperties>
