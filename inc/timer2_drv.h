@@ -12,7 +12,7 @@
 
 #define TIMER2_ARR       2500
 #define TIMER2_PRESCALER 100
-#define DUTY_CYCLE 1
+#define DUTY_CYCLE 30
 
 void init_timer2(void);
 
