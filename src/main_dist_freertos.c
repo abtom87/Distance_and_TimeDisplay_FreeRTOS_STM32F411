@@ -16,7 +16,7 @@
 #define USE_FREERTOS_ISR_API
 //#define ENABLE_DEBUG
 
-#define GPS_BUFFER_SIZE 384
+#define GPS_BUFFER_SIZE 400
 
 #define TASK1_STACK_SIZE 128
 #define TASK2_STACK_SIZE 256
@@ -55,7 +55,7 @@ QueueHandle_t xQueueTimeDispBuff;
 
 //volatile static task_dur_t task_duration;
 
-#define DISP_BUFF_LEN 10
+#define DISP_BUFF_LEN 15
 
 char buffer[DISP_BUFF_LEN] = { 0 };
 char time_buff[DISP_BUFF_LEN] = { 0 };
@@ -77,7 +77,7 @@ void vTask1_toggleLED(void* p)
 	while (1)
 	{
 		toggle_leds();
-		vTaskDelay(50);
+		vTaskDelay(500);
 
 	}
 
@@ -92,38 +92,50 @@ void vTask_HandlerInpCapture(void* p)
 {
 
 	static timestamp_t rcvd_tmpstamp;
-	static float distance = 0;
-	static uint16_t characteristic = 0;
-	static uint16_t mantissa = 0;
+	float distance = 0;
+	float temp_dist = 0;
+	unsigned long characteristic = 0;
+	unsigned long mantissa = 0;
 
 	char *distance_buf_ptr;
 	distance_buf_ptr = &buffer[0];
+
+	char timestampbuf[10] = { 0 };
+
 	while (1)
 	{
+		
+
 		//	task_duration.begin = xTaskGetTickCount();
 		if (xSemaphoreTake(xBinarySemaphore_InpCap, portMAX_DELAY) == pdTRUE)
 		{
-
+			TIM_Cmd(TIM2, DISABLE);
 			xQueueReceive(xQueueTimeStamp, &rcvd_tmpstamp, 0);
-			distance = (float) ((float) rcvd_tmpstamp.difference
-					/ (float) INP_CAPT_FACTOR);
-			distance *= (float) 17000;
-			characteristic = (uint32_t) distance;
-			mantissa = (distance - characteristic) * 1000;
+//			distance = (float) ((float) rcvd_tmpstamp.difference
+//					/ (float) INP_CAPT_FACTOR);
+			distance = (float) rcvd_tmpstamp.difference;
+			distance /= (float) (INP_CAPT_FACTOR);
 
-			//sprintf(buffer, "%lu", rcvd_tmpstamp.difference);
-			sprintf(buffer, "Dist: %lu.%1dcm", characteristic, mantissa);
+			distance *= (float) 17000;
+			characteristic = (unsigned long) distance;
+			temp_dist = (distance - (float) characteristic) * (float) 1000;
+			//mantissa = ( distance - characteristic) * 1000;
+			mantissa = (unsigned long) temp_dist;
+			sprintf(timestampbuf, "%lu", rcvd_tmpstamp.difference);
+			sprintf(buffer, "Dist: %lu.%lucm", characteristic, mantissa);
 
 			xQueueSend(xQueueDispDistBuff, &distance_buf_ptr, 0);
 
 			xSemaphoreGive(xBinarySemaphore_InpCapDone);
 
+			TIM_Cmd(TIM2, ENABLE);
+
 #ifdef ENABLE_DEBUG
-			USART_TX_string(buffer);
+			USART_TX_string(timestampbuf);
 			USART_TX_string(" ");
 #endif
 		}
-		vTaskDelay(50);
+		vTaskDelay(200);
 	}
 
 }
@@ -168,13 +180,13 @@ void vTask_parseTime(void *p)
 			xQueueReceive(xQueueTimeBuff, &TimeBuf, 0);
 
 			//parse time
-			parse_time(TimeBuf, "$GPRMC", buff_to_display_ptr, 7);
+			parse_time(TimeBuf, "$GPRMC,", buff_to_display_ptr, 7);
 
 			xQueueSend(xQueueTimeDispBuff, &buff_to_display_ptr, 0);
 			xSemaphoreGive(xBinarySem_ParsingDone);
 
 		}
-		vTaskDelay(40);
+		vTaskDelay(100);
 
 	}
 }
@@ -201,17 +213,15 @@ void vTask_DispTimeandDist(void *p)
 
 		if (xSemaphoreTake(xBinarySem_ParsingDone, portMAX_DELAY) == pdTRUE)
 		{
-
 			{
 				xQueueReceive(xQueueTimeDispBuff, &Disp_Time_Buff_ptr, 0);
-
 				LCD_Goto(1, 1);
 				LCD_Write_String("Time: ");
 				LCD_Write_String((const char*) Disp_Time_Buff_ptr);
 			}
-			vTaskDelay(300);
+		}		
+		vTaskDelay(300);
 
-		}
 	}
 
 }
@@ -247,13 +257,13 @@ int main(void)
 	init_dma2();
 	enable_dma2_irq();
 
-    /* Initialize USART module to receive GPS data*/
+	/* Initialize USART module to receive GPS data*/
 	init_usart6_comm_module();
 	init_usart6_gpio();
 
 	/*Create a semaphore for synchronizing Input capture interrupt and Distance calculation*/
 	xBinarySemaphore_InpCap = xSemaphoreCreateBinary();
-	 /* Create semaphore to synchronize DMA interrupt and parser task*/
+	/* Create semaphore to synchronize DMA interrupt and parser task*/
 	xBinarySemaphore_DMA = xSemaphoreCreateBinary();
 	/* Create semaphore to synchronize distance calculation task and display task*/
 	xBinarySemaphore_InpCapDone = xSemaphoreCreateBinary();
@@ -287,10 +297,9 @@ int main(void)
 
 
 	/*Make sure Semaphore creation was successful*/
-	if ( (xBinarySemaphore_InpCap != NULL) &&
-		 (xBinarySemaphore_DMA != NULL) &&
-		 (xBinarySemaphore_InpCapDone != NULL) &&
-		 (xBinarySem_ParsingDone != NULL)  )
+	if ((xBinarySemaphore_InpCap != NULL) && (xBinarySemaphore_DMA != NULL)
+			&& (xBinarySemaphore_InpCapDone != NULL)
+			&& (xBinarySem_ParsingDone != NULL))
 	{
 
 		/*Create a task */
@@ -377,26 +386,28 @@ void TIM1_CC_IRQHandler(void)
 
 		switch (pulse.next_edge)
 		{
-			case e_initial:
-				pulse.rising_tick = TIM_GetCapture1(TIM1);
-				pulse.next_edge = e_falling;
-				break;
+		case e_initial:
+			pulse.rising_tick = TIM_GetCapture1(TIM1);
+			pulse.next_edge = e_falling;
+			break;
 
-			case e_rising:
-				pulse.rising_tick = TIM_GetCapture1(TIM1);
-				pulse.current_edge = e_rising;
-				pulse.next_edge = e_falling;
-				break;
+		case e_rising:
 
-			case e_falling:
-				pulse.falling_tick = TIM_GetCapture1(TIM1);
-				pulse.current_edge = e_falling;
-				pulse.next_edge = e_rising;
+			pulse.rising_tick = TIM_GetCapture1(TIM1);
+			pulse.current_edge = e_rising;
+			pulse.next_edge = e_falling;
+			break;
 
-				break;
+		case e_falling:
+			pulse.falling_tick = TIM_GetCapture1(TIM1);
+			TIM1->CCR1 = 0;
+			pulse.current_edge = e_falling;
+			pulse.next_edge = e_rising;
 
-			default:
-				break;
+			break;
+
+		default:
+			break;
 
 		}
 
@@ -405,8 +416,9 @@ void TIM1_CC_IRQHandler(void)
 			if (pulse.falling_tick > pulse.rising_tick)
 				pulse.difference = (pulse.falling_tick - pulse.rising_tick);
 			else
-				pulse.difference = (65535 - pulse.rising_tick
-						+ pulse.falling_tick);
+			{
+				TIM1->CCR1 = 0;
+			}
 		}
 
 		/* Pass the pulse structure to handler task  */
@@ -417,7 +429,7 @@ void TIM1_CC_IRQHandler(void)
 				&xHigherPriorityTaskWoken);
 
 		TIM_ClearITPendingBit(TIM1, TIM_IT_CC1);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+		//portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 
 	}
 }
