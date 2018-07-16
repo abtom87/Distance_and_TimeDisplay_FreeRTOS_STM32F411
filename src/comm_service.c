@@ -17,7 +17,7 @@ void parser_gprmc(char *str_to_parse)
 
 	while (substr[k] != '\n')
 	{
-		USART_TX_byte(substr[k]);
+		//USART_TX_byte(substr[k]);
 		k++;
 	}
 	substr[k] = 0;
