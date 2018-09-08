@@ -36,7 +36,7 @@ void init_inp_capture_module(void)
 	TIM_ICInitTypeDef TIM1_ICInitStruct;
 
 	TIM1_ICInitStruct.TIM_Channel = TIM_Channel_1;
-	TIM1_ICInitStruct.TIM_ICFilter = 0x0F;
+	TIM1_ICInitStruct.TIM_ICFilter = 0x05;
 	TIM1_ICInitStruct.TIM_ICPolarity = TIM_ICPolarity_BothEdge;
 	TIM1_ICInitStruct.TIM_ICPrescaler = TIM_ICPSC_DIV1;
 	TIM1_ICInitStruct.TIM_ICSelection = TIM_ICSelection_DirectTI;
