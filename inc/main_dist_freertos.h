@@ -56,7 +56,7 @@ typedef struct {
 }task_dur_t;
 
 extern void Delay_ms(uint16_t );
-
+static void init_HW_peripherals(void);
 #define TRUE  1
 #define FALSE 0
 
