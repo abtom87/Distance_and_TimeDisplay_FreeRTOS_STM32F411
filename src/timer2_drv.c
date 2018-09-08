@@ -44,7 +44,7 @@ void init_timer2(void)
 
 	TIM_TimeBaseInit(TIM2, &TimInitStruct);
 
-	Tim2OCInitStr.TIM_Pulse = (DUTY_CYCLE * TIMER2_ARR / TIMER2_PRESCALER);
+	Tim2OCInitStr.TIM_Pulse = (uint32_t)( (DUTY_CYCLE * TIMER2_ARR) / 100 );
 	Tim2OCInitStr.TIM_OCMode = TIM_OCMode_PWM2;
 	Tim2OCInitStr.TIM_OCPolarity = TIM_OCPolarity_Low;
 	Tim2OCInitStr.TIM_OutputState = TIM_OutputState_Enable;
