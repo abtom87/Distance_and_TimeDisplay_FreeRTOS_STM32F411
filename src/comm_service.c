@@ -70,8 +70,8 @@ void parse_time(char *str_to_parse, char *str_to_extract,
 	if (time_to_disp_buff[1] == 0x39)
 	{
 #ifdef  SUMMER_TIME
-		time_to_disp_buff[1] = 0x30;
-		time_to_disp_buff[0] += 2;
+		time_to_disp_buff[1] = 0x31;
+		time_to_disp_buff[0] += 1;
 #else
 		time_to_disp_buff[1] = 0x30;
 		time_to_disp_buff[0] += 1;
@@ -83,7 +83,14 @@ void parse_time(char *str_to_parse, char *str_to_extract,
 	}
 	else
 #ifdef  SUMMER_TIME
-		time_to_disp_buff[1] += 2;
+		if (time_to_disp_buff[1] == 0x38)
+		{
+			time_to_disp_buff[1] = 0x30;
+			time_to_disp_buff[0] += 1;
+
+		}
+		else
+			time_to_disp_buff[1] +=2;
 #else
 	time_to_disp_buff[1] += 1;
 #endif
