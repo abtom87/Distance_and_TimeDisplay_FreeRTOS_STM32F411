@@ -6,7 +6,7 @@ This is a project where multitaksing is demonstrated with FreeRTOS and STM32F411
 In this project, Time in HHMMSS format is displayed on LCD Display and the Distance of an object from an Ultrasonic sensor HC-SR04 is displayed in cm.
 LCD Display is controlled via I2C bus. In this project i have used GPS module to extract time. Ultrasound module HC-04 to measure distance in cm between the module and the object. Time and Distance are displayed on the LCD display. The uC sends commands to LCD via I2C bus. I have used FreeRTOS to manage my 4 Tasks. Task1 is a dummy task that blinks LEDs. Task 2 parses time from a buffer that is filled when a DMA Transfer complete is done. Task 3 calculates the distance depending on the pulsewidth of the echo signal recieved from HC-04 module. Task 4 is for displaying the parsed time and distance to the LCD.
 
-![Imageq](./Images/Img1.jpg=240x300)
+![Imageq](./Images/Img1.jpg =240x300)
 
 
 
