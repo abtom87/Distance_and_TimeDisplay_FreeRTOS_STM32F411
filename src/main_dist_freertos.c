@@ -21,8 +21,8 @@
 #define TASK1_STACK_SIZE 128
 #define TASK2_STACK_SIZE 256
 #define TASK3_STACK_SIZE 256
-#define TASK4_STACK_SIZE 1024
-#define TASK5_STACK_SIZE 1024
+#define TASK4_STACK_SIZE 512
+#define TASK5_STACK_SIZE 512
 
 #define TASK1_PRIO 1
 #define TASK2_PRIO 3
@@ -156,9 +156,7 @@ void vTask_DisplayDistance(void *p)
 			vTaskDelay(150);
 			xSemaphoreGive(xBinarySem_LCD);
 		}
-
 	}
-
 }
 
 /* TASK 4
@@ -226,40 +224,48 @@ void vTask_DispTimeandDist(void *p)
 
 }
 
+
+static void init_HW_peripherals(void)
+{
+	/*Initialize USART2 peripheral */
+		init_USART2();
+		init_led_gpios();
+		//init_debug_pin();  /* Initialize Debug pin LogicAnalyzer*/
+
+		/* Initialize I2C1 peripheral*/
+		init_i2c_bus_config();
+		init_i2c_gpio();
+
+		/* Initialize the LCD using initialization commands */
+		LCD_Init();
+		LCD_Clear();
+
+		/* Initialize Timer2 to trigger the Ultrasound HC04 module*/
+		init_timer2();
+		enable_alt_func_gpio();
+
+		/* Initialize Timer1 to initialize the input capture to receive echo from
+		 *  the Ultrasound HC04 module*/
+		init_capture_gpio();
+		init_inp_capture_module();
+		enable_inp_capture_irq();
+
+		/* initialize DMA module for receiving GPS data */
+		init_dma2();
+		enable_dma2_irq();
+
+		/* Initialize USART module to receive GPS data*/
+		init_usart6_comm_module();
+		init_usart6_gpio();
+
+}
+
 int main(void)
 {
 	SystemInit();
 
-	/*Initialize USART2 peripheral */
-	init_USART2();
-	init_led_gpios();
-	//init_debug_pin();  /* Initialize Debug pin LogicAnalyzer*/
-
-	/* Initialize I2C1 peripheral*/
-	init_i2c_bus_config();
-	init_i2c_gpio();
-
-	/* Initialize the LCD using initialization commands */
-	LCD_Init();
-	LCD_Clear();
-
-	/* Initialize Timer2 to trigger the Ultrasound HC04 module*/
-	init_timer2();
-	enable_alt_func_gpio();
-
-	/* Initialize Timer1 to initialize the input capture to receive echo from
-	 *  the Ultrasound HC04 module*/
-	init_capture_gpio();
-	init_inp_capture_module();
-	enable_inp_capture_irq();
-
-	/* initialize DMA module for receiving GPS data */
-	init_dma2();
-	enable_dma2_irq();
-
-	/* Initialize USART module to receive GPS data*/
-	init_usart6_comm_module();
-	init_usart6_gpio();
+	/* Initialise all the relevant peripherals*/
+	init_HW_peripherals();
 
 	/*Create a semaphore for synchronizing Input capture interrupt and Distance calculation*/
 	xBinarySemaphore_InpCap = xSemaphoreCreateBinary();
@@ -286,15 +292,11 @@ int main(void)
 	if (xQueueDispDistBuff == NULL)
 		USART_TX_string("Queue Creation xQueueDispDistBuff Failed!\r\n");
 
-
 	if (xQueueTimeBuff == NULL)
 		USART_TX_string("Queue Creation xQueueTimeBuff Failed!\r\n");
 
 	if (xQueueTimeDispBuff == NULL)
 		USART_TX_string("Queue Creation xQueueTimeDispBuff Failed!\r\n");
-
-
-
 
 	/*Make sure Semaphore creation was successful*/
 	if ((xBinarySemaphore_InpCap != NULL) && (xBinarySemaphore_DMA != NULL)
@@ -309,7 +311,6 @@ int main(void)
 		xTaskCreateStatic(vTask1_toggleLED, "tsk_toggleLEDs", TASK1_STACK_SIZE,
 		NULL,
 		TASK1_PRIO, Task1_Stack, &Task1Buff);
-
 
 		xTaskCreateStatic(vTask_HandlerInpCapture, "tsk_IC_Hndlr",
 		TASK2_STACK_SIZE,
@@ -378,6 +379,8 @@ void TIM1_CC_IRQHandler(void)
 {
 	static timestamp_t pulse;
 
+
+
 	static BaseType_t xHigherPriorityTaskWoken;
 	xHigherPriorityTaskWoken = pdFALSE;
 
@@ -432,6 +435,8 @@ void TIM1_CC_IRQHandler(void)
 		//portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 
 	}
+
+
 }
 
 void vApplicationTickHook(void)
