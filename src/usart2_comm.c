@@ -20,10 +20,14 @@ void USART_TX_byte(uint8_t byte)
 
 void USART_TX_string(char *str_to_transmit)
 {
-	int i;
+	int i=0;
 
-	for (i = 0; i < (strlen(str_to_transmit)); i++)
-		USART_TX_byte(str_to_transmit[i]);
+
+	while(*(str_to_transmit + i)!=0)
+	{
+		USART_TX_byte(*(str_to_transmit + i));
+		++i;
+	}
 
 }
 /*

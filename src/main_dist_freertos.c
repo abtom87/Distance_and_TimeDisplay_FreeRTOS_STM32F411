@@ -14,21 +14,22 @@
 #define CCM_RAM __attribute__((section(".ccmram")))
 
 #define USE_FREERTOS_ISR_API
+//#define ENABLE_GPS_OUTPUT
 //#define ENABLE_DEBUG
 
-#define GPS_BUFFER_SIZE 400
+#define GPS_BUFFER_SIZE DMA_RX_BUFFER_SIZE /* 200 bytes */
 
-#define TASK1_STACK_SIZE 128
+#define TASK1_STACK_SIZE 135
 #define TASK2_STACK_SIZE 256
 #define TASK3_STACK_SIZE 256
 #define TASK4_STACK_SIZE 512
 #define TASK5_STACK_SIZE 512
 
-#define TASK1_PRIO 1
-#define TASK2_PRIO 3
-#define TASK3_PRIO 5
-#define TASK4_PRIO 2
-#define TASK5_PRIO 1
+#define TASK1_PRIO 1  //1
+#define TASK2_PRIO 2  //3
+#define TASK3_PRIO 5  //5
+#define TASK4_PRIO 4  //2
+#define TASK5_PRIO 5  //1
 
 StackType_t Task1_Stack[TASK1_STACK_SIZE] CCM_RAM; /* Put task stack in CCM */
 StackType_t Task2_Stack[TASK2_STACK_SIZE] CCM_RAM; /* Put task stack in CCM */
@@ -53,13 +54,20 @@ QueueHandle_t xQueueDispDistBuff;
 QueueHandle_t xQueueTimeBuff;
 QueueHandle_t xQueueTimeDispBuff;
 
-//volatile static task_dur_t task_duration;
 
-#define DISP_BUFF_LEN 15
+#define DISP_BUFF_LEN 20
 
 char buffer[DISP_BUFF_LEN] = { 0 };
 char time_buff[DISP_BUFF_LEN] = { 0 };
 
+
+void print_elapsed_time_ticks(TickType_t* start, TickType_t* end)
+{
+	char test_buffer[10] = { 0 };
+	sprintf(test_buffer, "%lu", *end - *start);
+	USART_TX_string(test_buffer);
+	USART_TX_string("ms\r\n");
+}
 void Delay_ms(uint16_t millisec)
 {
 	uint32_t i, result;
@@ -77,7 +85,7 @@ void vTask1_toggleLED(void* p)
 	while (1)
 	{
 		toggle_leds();
-		vTaskDelay(500);
+		vTaskDelay(100);
 
 	}
 
@@ -100,13 +108,8 @@ void vTask_HandlerInpCapture(void* p)
 	char *distance_buf_ptr;
 	distance_buf_ptr = &buffer[0];
 
-	char timestampbuf[10] = { 0 };
-
 	while (1)
 	{
-		
-
-		//	task_duration.begin = xTaskGetTickCount();
 		if (xSemaphoreTake(xBinarySemaphore_InpCap, portMAX_DELAY) == pdTRUE)
 		{
 			TIM_Cmd(TIM2, DISABLE);
@@ -116,14 +119,13 @@ void vTask_HandlerInpCapture(void* p)
 			distance = (float) rcvd_tmpstamp.difference;
 			distance /= (float) (INP_CAPT_FACTOR);
 
-			distance *= (float) 17000;
+			distance *= (float) 17150;
 			characteristic = (unsigned long) distance;
 			temp_dist = (distance - (float) characteristic) * (float) 1000;
 			//mantissa = ( distance - characteristic) * 1000;
 			mantissa = (unsigned long) temp_dist;
-			sprintf(timestampbuf, "%lu", rcvd_tmpstamp.difference);
-			sprintf(buffer, "Dist: %lu.%lucm", characteristic, mantissa);
-
+			snprintf(buffer, DISP_BUFF_LEN ,"Dist: %lu.%lucm", characteristic, mantissa);
+			buffer[DISP_BUFF_LEN-1]=0;
 			xQueueSend(xQueueDispDistBuff, &distance_buf_ptr, 0);
 
 			xSemaphoreGive(xBinarySemaphore_InpCapDone);
@@ -131,11 +133,13 @@ void vTask_HandlerInpCapture(void* p)
 			TIM_Cmd(TIM2, ENABLE);
 
 #ifdef ENABLE_DEBUG
+			char timestampbuf[10] = { 0 };
+			sprintf(timestampbuf, "%lu", rcvd_tmpstamp.difference);
 			USART_TX_string(timestampbuf);
 			USART_TX_string(" ");
 #endif
 		}
-		vTaskDelay(200);
+		vTaskDelay(100);
 	}
 
 }
@@ -149,12 +153,13 @@ void vTask_DisplayDistance(void *p)
 		if (xSemaphoreTake(xBinarySemaphore_InpCapDone, portMAX_DELAY) == pdTRUE)
 		{
 			xQueueReceive(xQueueDispDistBuff, &Rx_Buff_ptr, 0);
-
+			//LCD_Clear_Line(2);
 			LCD_Goto(1, 2);
 			LCD_Write_String((const char*) Rx_Buff_ptr);
-
-			vTaskDelay(150);
 			xSemaphoreGive(xBinarySem_LCD);
+
+			vTaskDelay(200);
+
 		}
 	}
 }
@@ -168,23 +173,35 @@ void vTask_parseTime(void *p)
 {
 	char *TimeBuf;
 	char *buff_to_display_ptr;
-
+	TickType_t start,end;
 	buff_to_display_ptr = &time_buff[0];
 	while (1)
 	{
-
+		start = xTaskGetTickCount();
 		if (xSemaphoreTake(xBinarySemaphore_DMA, portMAX_DELAY) == pdTRUE)
 		{
+
 			xQueueReceive(xQueueTimeBuff, &TimeBuf, 0);
 
-			//parse time
+			/*parse time from the received GPS buffer */
 			parse_time(TimeBuf, "$GPRMC,", buff_to_display_ptr, 7);
+			end= xTaskGetTickCount();
+#ifdef ENABLE_GPS_OUTPUT
+			USART_TX_string(TimeBuf);
+			USART_TX_string("\r\n");
+#endif
 
 			xQueueSend(xQueueTimeDispBuff, &buff_to_display_ptr, 0);
 			xSemaphoreGive(xBinarySem_ParsingDone);
 
 		}
-		vTaskDelay(100);
+
+
+#ifdef ENABLE_DEBUG
+		print_elapsed_time_ticks(&start, &end);
+#endif
+
+		vTaskDelay(3);
 
 	}
 }
@@ -197,19 +214,20 @@ void vTask_parseTime(void *p)
 void vTask_DispTimeandDist(void *p)
 {
 	char *Disp_Time_Buff_ptr;
-	char *Rx_Buff_ptr;
+	char *Disp_Dist_Buff_ptr;
+
 	while (1)
 	{
 
 		if (xSemaphoreTake(xBinarySemaphore_InpCapDone, portMAX_DELAY) == pdTRUE)
 		{
-			xQueueReceive(xQueueDispDistBuff, &Rx_Buff_ptr, 0);
-
-			LCD_Goto(1, 2);
-			LCD_Write_String((const char*) Rx_Buff_ptr);
+			xQueueReceive(xQueueDispDistBuff, &Disp_Dist_Buff_ptr, 0);
+			LCD_Clear_Line(2);
+			LCD_Write_String((const char*) Disp_Dist_Buff_ptr);
 		}
 
 		if (xSemaphoreTake(xBinarySem_ParsingDone, portMAX_DELAY) == pdTRUE)
+
 		{
 			{
 				xQueueReceive(xQueueTimeDispBuff, &Disp_Time_Buff_ptr, 0);
@@ -217,15 +235,14 @@ void vTask_DispTimeandDist(void *p)
 				LCD_Write_String("Time: ");
 				LCD_Write_String((const char*) Disp_Time_Buff_ptr);
 			}
-		}		
-		vTaskDelay(300);
+		}
+		vTaskDelay(5);
 
 	}
-
 }
 
 
-static void init_HW_peripherals(void)
+void init_HW_peripherals(void)
 {
 	/*Initialize USART2 peripheral */
 		init_USART2();
@@ -264,7 +281,7 @@ int main(void)
 {
 	SystemInit();
 
-	/* Initialise all the relevant peripherals*/
+	/* Initialize all the relevant peripherals*/
 	init_HW_peripherals();
 
 	/*Create a semaphore for synchronizing Input capture interrupt and Distance calculation*/
@@ -340,7 +357,7 @@ int main(void)
 }
 
 /*DMA IRQ HANDLER*/
-static char gps_string[GPS_BUFFER_SIZE] = { 0 };
+static char gps_string[GPS_BUFFER_SIZE+1] = { 0 };
 void DMA2_Stream2_IRQHandler(void)
 {
 
@@ -432,7 +449,7 @@ void TIM1_CC_IRQHandler(void)
 				&xHigherPriorityTaskWoken);
 
 		TIM_ClearITPendingBit(TIM1, TIM_IT_CC1);
-		//portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 
 	}
 

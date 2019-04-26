@@ -56,7 +56,8 @@ typedef struct {
 }task_dur_t;
 
 extern void Delay_ms(uint16_t );
-static void init_HW_peripherals(void);
+void init_HW_peripherals(void);
+void print_elapsed_time_ticks(TickType_t* start, TickType_t* end);
 #define TRUE  1
 #define FALSE 0
 
