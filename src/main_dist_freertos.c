@@ -11,7 +11,7 @@
 #include <main_dist_freertos.h>
 
 // Macro to use CCM (Core Coupled Memory) in STM32F4
-#define CCM_RAM __attribute__((section(".ccmram")))
+#define CCM_RAM __attribute__ ((section (".ccmram")))
 
 #define USE_FREERTOS_ISR_API
 //#define ENABLE_GPS_OUTPUT
@@ -25,11 +25,11 @@
 #define TASK4_STACK_SIZE 512
 #define TASK5_STACK_SIZE 512
 
-#define TASK1_PRIO 1  //1
-#define TASK2_PRIO 2  //3
-#define TASK3_PRIO 5  //5
-#define TASK4_PRIO 4  //2
-#define TASK5_PRIO 5  //1
+#define TASK1_PRIO 1 // 1
+#define TASK2_PRIO 2 // 3
+#define TASK3_PRIO 5 // 5
+#define TASK4_PRIO 4 // 2
+#define TASK5_PRIO 5 // 1
 
 StackType_t Task1_Stack[TASK1_STACK_SIZE] CCM_RAM; /* Put task stack in CCM */
 StackType_t Task2_Stack[TASK2_STACK_SIZE] CCM_RAM; /* Put task stack in CCM */
@@ -54,41 +54,36 @@ QueueHandle_t xQueueDispDistBuff;
 QueueHandle_t xQueueTimeBuff;
 QueueHandle_t xQueueTimeDispBuff;
 
-
 #define DISP_BUFF_LEN 20
 
-char buffer[DISP_BUFF_LEN] = { 0 };
+char buffer[DISP_BUFF_LEN]    = { 0 };
 char time_buff[DISP_BUFF_LEN] = { 0 };
 
-
-void print_elapsed_time_ticks(TickType_t* start, TickType_t* end)
+void print_elapsed_time_ticks (TickType_t *start, TickType_t *end)
 {
-	char test_buffer[10] = { 0 };
-	sprintf(test_buffer, "%lu", *end - *start);
-	USART_TX_string(test_buffer);
-	USART_TX_string("ms\r\n");
+    char test_buffer[10] = { 0 };
+    sprintf (test_buffer, "%lu", *end - *start);
+    USART_TX_string (test_buffer);
+    USART_TX_string ("ms\r\n");
 }
-void Delay_ms(uint16_t millisec)
+void Delay_ms (uint16_t millisec)
 {
-	uint32_t i, result;
-	result = 25000 * millisec; /*measured using Logic-analyzer; corresponds to ~1ms*/
-	for (i = 0; i < result; i++)
-	{
-		__asm__("nop");
-	}
+    uint32_t i, result;
+    result = 25000 * millisec; /*measured using Logic-analyzer; corresponds to ~1ms*/
+    for (i = 0; i < result; i++)
+    {
+        __asm__("nop");
+    }
 }
 
 /*TASK 1*/
-void vTask1_toggleLED(void* p)
+void vTask1_toggleLED (void *p)
 {
-
-	while (1)
-	{
-		toggle_leds();
-		vTaskDelay(100);
-
-	}
-
+    while (1)
+    {
+        toggle_leds ();
+        vTaskDelay (100);
+    }
 }
 
 /*TASK 2
@@ -96,72 +91,69 @@ void vTask1_toggleLED(void* p)
  *  based on the content in CCR register
  *
  * */
-void vTask_HandlerInpCapture(void* p)
+void vTask_HandlerInpCapture (void *p)
 {
+    static timestamp_t rcvd_tmpstamp;
+    float distance               = 0;
+    float temp_dist              = 0;
+    unsigned long characteristic = 0;
+    unsigned long mantissa       = 0;
 
-	static timestamp_t rcvd_tmpstamp;
-	float distance = 0;
-	float temp_dist = 0;
-	unsigned long characteristic = 0;
-	unsigned long mantissa = 0;
+    char *distance_buf_ptr;
+    distance_buf_ptr = &buffer[0];
 
-	char *distance_buf_ptr;
-	distance_buf_ptr = &buffer[0];
+    while (1)
+    {
+        if (xSemaphoreTake (xBinarySemaphore_InpCap, portMAX_DELAY) == pdTRUE)
+        {
+            TIM_Cmd (TIM2, DISABLE);
+            xQueueReceive (xQueueTimeStamp, &rcvd_tmpstamp, 0);
+            //			distance = (float) ((float) rcvd_tmpstamp.difference
+            //					/ (float) INP_CAPT_FACTOR);
+            distance = (float)rcvd_tmpstamp.difference;
+            distance /= (float)(INP_CAPT_FACTOR);
 
-	while (1)
-	{
-		if (xSemaphoreTake(xBinarySemaphore_InpCap, portMAX_DELAY) == pdTRUE)
-		{
-			TIM_Cmd(TIM2, DISABLE);
-			xQueueReceive(xQueueTimeStamp, &rcvd_tmpstamp, 0);
-//			distance = (float) ((float) rcvd_tmpstamp.difference
-//					/ (float) INP_CAPT_FACTOR);
-			distance = (float) rcvd_tmpstamp.difference;
-			distance /= (float) (INP_CAPT_FACTOR);
+            distance *= (float)17150;
+            characteristic = (unsigned long)distance;
+            temp_dist      = (distance - (float)characteristic) * (float)1000;
+            // mantissa = ( distance - characteristic) * 1000;
+            mantissa = (unsigned long)temp_dist;
+            snprintf (buffer, DISP_BUFF_LEN, "Dist: %lu.%lucm", characteristic, mantissa);
+            buffer[DISP_BUFF_LEN - 1] = 0;
+            xQueueSend (xQueueDispDistBuff, &distance_buf_ptr, 0);
 
-			distance *= (float) 17150;
-			characteristic = (unsigned long) distance;
-			temp_dist = (distance - (float) characteristic) * (float) 1000;
-			//mantissa = ( distance - characteristic) * 1000;
-			mantissa = (unsigned long) temp_dist;
-			snprintf(buffer, DISP_BUFF_LEN ,"Dist: %lu.%lucm", characteristic, mantissa);
-			buffer[DISP_BUFF_LEN-1]=0;
-			xQueueSend(xQueueDispDistBuff, &distance_buf_ptr, 0);
+            xSemaphoreGive (xBinarySemaphore_InpCapDone);
 
-			xSemaphoreGive(xBinarySemaphore_InpCapDone);
-
-			TIM_Cmd(TIM2, ENABLE);
+            TIM_Cmd (TIM2, ENABLE);
 
 #ifdef ENABLE_DEBUG
-			char timestampbuf[10] = { 0 };
-			sprintf(timestampbuf, "%lu", rcvd_tmpstamp.difference);
-			USART_TX_string(timestampbuf);
-			USART_TX_string(" ");
+            char timestampbuf[10] = { 0 };
+            sprintf (timestampbuf, "%lu", rcvd_tmpstamp.difference);
+            USART_TX_string (timestampbuf);
+            USART_TX_string (" ");
 #endif
-		}
-		vTaskDelay(100);
-	}
-
+        }
+        vTaskDelay (100);
+    }
 }
 
-/*TASK 3*//*Disabled for now*/
-void vTask_DisplayDistance(void *p)
+/*TASK 3*/ /*Disabled for now*/
+void vTask_DisplayDistance (void *p)
 {
-	char *Rx_Buff_ptr;
-	while (1)
-	{
-		if (xSemaphoreTake(xBinarySemaphore_InpCapDone, portMAX_DELAY) == pdTRUE)
-		{
-			xQueueReceive(xQueueDispDistBuff, &Rx_Buff_ptr, 0);
-			//LCD_Clear_Line(2);
-			LCD_Goto(1, 2);
-			LCD_Write_String((const char*) Rx_Buff_ptr);
-			xSemaphoreGive(xBinarySem_LCD);
+    char *Rx_Buff_ptr;
+    while (1)
+    {
+        if (xSemaphoreTake (xBinarySemaphore_InpCapDone, portMAX_DELAY) == pdTRUE)
+        {
+            xQueueReceive (xQueueDispDistBuff, &Rx_Buff_ptr, 0);
+            // LCD_Clear_Line(2);
+            LCD_Goto (1, 2);
+            LCD_Write_String ((const char *)Rx_Buff_ptr);
+            xSemaphoreGive (xBinarySem_LCD);
 
-			vTaskDelay(200);
-
-		}
-	}
+            vTaskDelay (200);
+        }
+    }
 }
 
 /* TASK 4
@@ -169,41 +161,37 @@ void vTask_DisplayDistance(void *p)
  * This buffer is received when DMA interrupt triggers
  * */
 
-void vTask_parseTime(void *p)
+void vTask_parseTime (void *p)
 {
-	char *TimeBuf;
-	char *buff_to_display_ptr;
-	TickType_t start,end;
-	buff_to_display_ptr = &time_buff[0];
-	while (1)
-	{
-		start = xTaskGetTickCount();
-		if (xSemaphoreTake(xBinarySemaphore_DMA, portMAX_DELAY) == pdTRUE)
-		{
+    char *TimeBuf;
+    char *buff_to_display_ptr;
+    TickType_t start, end;
+    buff_to_display_ptr = &time_buff[0];
+    while (1)
+    {
+        start = xTaskGetTickCount ();
+        if (xSemaphoreTake (xBinarySemaphore_DMA, portMAX_DELAY) == pdTRUE)
+        {
+            xQueueReceive (xQueueTimeBuff, &TimeBuf, 0);
 
-			xQueueReceive(xQueueTimeBuff, &TimeBuf, 0);
-
-			/*parse time from the received GPS buffer */
-			parse_time(TimeBuf, "$GPRMC,", buff_to_display_ptr, 7);
-			end= xTaskGetTickCount();
+            /*parse time from the received GPS buffer */
+            parse_time (TimeBuf, "$GPRMC,", buff_to_display_ptr, 7);
+            end = xTaskGetTickCount ();
 #ifdef ENABLE_GPS_OUTPUT
-			USART_TX_string(TimeBuf);
-			USART_TX_string("\r\n");
+            USART_TX_string (TimeBuf);
+            USART_TX_string ("\r\n");
 #endif
 
-			xQueueSend(xQueueTimeDispBuff, &buff_to_display_ptr, 0);
-			xSemaphoreGive(xBinarySem_ParsingDone);
-
-		}
-
+            xQueueSend (xQueueTimeDispBuff, &buff_to_display_ptr, 0);
+            xSemaphoreGive (xBinarySem_ParsingDone);
+        }
 
 #ifdef ENABLE_DEBUG
-		print_elapsed_time_ticks(&start, &end);
+        print_elapsed_time_ticks (&start, &end);
 #endif
 
-		vTaskDelay(3);
-
-	}
+        vTaskDelay (3);
+    }
 }
 
 /* TASK 5
@@ -211,252 +199,230 @@ void vTask_parseTime(void *p)
  * and displays sequentially over LCD
  * */
 
-void vTask_DispTimeandDist(void *p)
+void vTask_DispTimeandDist (void *p)
 {
-	char *Disp_Time_Buff_ptr;
-	char *Disp_Dist_Buff_ptr;
+    char *Disp_Time_Buff_ptr;
+    char *Disp_Dist_Buff_ptr;
 
-	while (1)
-	{
+    while (1)
+    {
+        if (xSemaphoreTake (xBinarySemaphore_InpCapDone, portMAX_DELAY) == pdTRUE)
+        {
+            xQueueReceive (xQueueDispDistBuff, &Disp_Dist_Buff_ptr, 0);
+            LCD_Clear_Line (2);
+            LCD_Write_String ((const char *)Disp_Dist_Buff_ptr);
+        }
 
-		if (xSemaphoreTake(xBinarySemaphore_InpCapDone, portMAX_DELAY) == pdTRUE)
-		{
-			xQueueReceive(xQueueDispDistBuff, &Disp_Dist_Buff_ptr, 0);
-			LCD_Clear_Line(2);
-			LCD_Write_String((const char*) Disp_Dist_Buff_ptr);
-		}
+        if (xSemaphoreTake (xBinarySem_ParsingDone, portMAX_DELAY) == pdTRUE)
 
-		if (xSemaphoreTake(xBinarySem_ParsingDone, portMAX_DELAY) == pdTRUE)
-
-		{
-			{
-				xQueueReceive(xQueueTimeDispBuff, &Disp_Time_Buff_ptr, 0);
-				LCD_Goto(1, 1);
-				LCD_Write_String("Time: ");
-				LCD_Write_String((const char*) Disp_Time_Buff_ptr);
-			}
-		}
-		vTaskDelay(5);
-
-	}
+        {
+            {
+                xQueueReceive (xQueueTimeDispBuff, &Disp_Time_Buff_ptr, 0);
+                LCD_Goto (1, 1);
+                LCD_Write_String ("Time: ");
+                LCD_Write_String ((const char *)Disp_Time_Buff_ptr);
+            }
+        }
+        vTaskDelay (5);
+    }
 }
 
-
-void init_HW_peripherals(void)
+void init_HW_peripherals (void)
 {
-	/*Initialize USART2 peripheral */
-		init_USART2();
-		init_led_gpios();
-		//init_debug_pin();  /* Initialize Debug pin LogicAnalyzer*/
+    /*Initialize USART2 peripheral */
+    init_USART2 ();
+    init_led_gpios ();
+    // init_debug_pin();  /* Initialize Debug pin LogicAnalyzer*/
 
-		/* Initialize I2C1 peripheral*/
-		init_i2c_bus_config();
-		init_i2c_gpio();
+    /* Initialize I2C1 peripheral*/
+    init_i2c_bus_config ();
+    init_i2c_gpio ();
 
-		/* Initialize the LCD using initialization commands */
-		LCD_Init();
-		LCD_Clear();
+    /* Initialize the LCD using initialization commands */
+    LCD_Init ();
+    LCD_Clear ();
 
-		/* Initialize Timer2 to trigger the Ultrasound HC04 module*/
-		init_timer2();
-		enable_alt_func_gpio();
+    /* Initialize Timer2 to trigger the Ultrasound HC04 module*/
+    init_timer2 ();
+    enable_alt_func_gpio ();
 
-		/* Initialize Timer1 to initialize the input capture to receive echo from
-		 *  the Ultrasound HC04 module*/
-		init_capture_gpio();
-		init_inp_capture_module();
-		enable_inp_capture_irq();
+    /* Initialize Timer1 to initialize the input capture to receive echo from
+     *  the Ultrasound HC04 module*/
+    init_capture_gpio ();
+    init_inp_capture_module ();
+    enable_inp_capture_irq ();
 
-		/* initialize DMA module for receiving GPS data */
-		init_dma2();
-		enable_dma2_irq();
+    /* initialize DMA module for receiving GPS data */
+    init_dma2 ();
+    enable_dma2_irq ();
 
-		/* Initialize USART module to receive GPS data*/
-		init_usart6_comm_module();
-		init_usart6_gpio();
-
+    /* Initialize USART module to receive GPS data*/
+    init_usart6_comm_module ();
+    init_usart6_gpio ();
 }
 
-int main(void)
+int main (void)
 {
-	SystemInit();
+    SystemInit ();
 
-	/* Initialize all the relevant peripherals*/
-	init_HW_peripherals();
+    /* Initialize all the relevant peripherals*/
+    init_HW_peripherals ();
 
-	/*Create a semaphore for synchronizing Input capture interrupt and Distance calculation*/
-	xBinarySemaphore_InpCap = xSemaphoreCreateBinary();
-	/* Create semaphore to synchronize DMA interrupt and parser task*/
-	xBinarySemaphore_DMA = xSemaphoreCreateBinary();
-	/* Create semaphore to synchronize distance calculation task and display task*/
-	xBinarySemaphore_InpCapDone = xSemaphoreCreateBinary();
-	/*  Create semaphore to synchronize parser task and display task*/
-	xBinarySem_ParsingDone = xSemaphoreCreateBinary();
-	xBinarySem_LCD = xSemaphoreCreateBinary();
+    /*Create a semaphore for synchronizing Input capture interrupt and Distance calculation*/
+    xBinarySemaphore_InpCap = xSemaphoreCreateBinary ();
+    /* Create semaphore to synchronize DMA interrupt and parser task*/
+    xBinarySemaphore_DMA = xSemaphoreCreateBinary ();
+    /* Create semaphore to synchronize distance calculation task and display task*/
+    xBinarySemaphore_InpCapDone = xSemaphoreCreateBinary ();
+    /*  Create semaphore to synchronize parser task and display task*/
+    xBinarySem_ParsingDone = xSemaphoreCreateBinary ();
+    xBinarySem_LCD         = xSemaphoreCreateBinary ();
 
-	/* Create  a queue to send timestamp structure to Distance calculation task*/
-	xQueueTimeStamp = xQueueCreate(1, sizeof(timestamp_t));
-	/* Create  a queue to send a char buffer (calculated distance) to Display task*/
-	xQueueDispDistBuff = xQueueCreate(DISP_BUFF_LEN, sizeof(char *));
-	/* Create  a queue to send a char buffer(GPS Data) to parser task*/
-	xQueueTimeBuff = xQueueCreate(GPS_BUFFER_SIZE, sizeof(char*));
-	/* Create  a queue to send a char buffer (Time) to Display task*/
-	xQueueTimeDispBuff = xQueueCreate(DISP_BUFF_LEN, sizeof(char*));
+    /* Create  a queue to send timestamp structure to Distance calculation task*/
+    xQueueTimeStamp = xQueueCreate (1, sizeof (timestamp_t));
+    /* Create  a queue to send a char buffer (calculated distance) to Display task*/
+    xQueueDispDistBuff = xQueueCreate (DISP_BUFF_LEN, sizeof (char *));
+    /* Create  a queue to send a char buffer(GPS Data) to parser task*/
+    xQueueTimeBuff = xQueueCreate (GPS_BUFFER_SIZE, sizeof (char *));
+    /* Create  a queue to send a char buffer (Time) to Display task*/
+    xQueueTimeDispBuff = xQueueCreate (DISP_BUFF_LEN, sizeof (char *));
 
-	if (xQueueTimeStamp == NULL)
-		USART_TX_string("Queue Creation xQueueTimeStamp Failed!\r\n");
+    if (xQueueTimeStamp == NULL)
+        USART_TX_string ("Queue Creation xQueueTimeStamp Failed!\r\n");
 
-	if (xQueueDispDistBuff == NULL)
-		USART_TX_string("Queue Creation xQueueDispDistBuff Failed!\r\n");
+    if (xQueueDispDistBuff == NULL)
+        USART_TX_string ("Queue Creation xQueueDispDistBuff Failed!\r\n");
 
-	if (xQueueTimeBuff == NULL)
-		USART_TX_string("Queue Creation xQueueTimeBuff Failed!\r\n");
+    if (xQueueTimeBuff == NULL)
+        USART_TX_string ("Queue Creation xQueueTimeBuff Failed!\r\n");
 
-	if (xQueueTimeDispBuff == NULL)
-		USART_TX_string("Queue Creation xQueueTimeDispBuff Failed!\r\n");
+    if (xQueueTimeDispBuff == NULL)
+        USART_TX_string ("Queue Creation xQueueTimeDispBuff Failed!\r\n");
 
-	/*Make sure Semaphore creation was successful*/
-	if ((xBinarySemaphore_InpCap != NULL) && (xBinarySemaphore_DMA != NULL)
-			&& (xBinarySemaphore_InpCapDone != NULL)
-			&& (xBinarySem_ParsingDone != NULL))
-	{
+    /*Make sure Semaphore creation was successful*/
+    if ((xBinarySemaphore_InpCap != NULL) && (xBinarySemaphore_DMA != NULL) &&
+        (xBinarySemaphore_InpCapDone != NULL) && (xBinarySem_ParsingDone != NULL))
+    {
+        /*Create a task */
+        /*Stack and TCB are placed in CCM of STM32F4 */
+        /* The CCM block is connected directly to the core, which leads to zero wait states */
 
-		/*Create a task */
-		/*Stack and TCB are placed in CCM of STM32F4 */
-		/* The CCM block is connected directly to the core, which leads to zero wait states */
+        xTaskCreateStatic (vTask1_toggleLED, "tsk_toggleLEDs", TASK1_STACK_SIZE, NULL, TASK1_PRIO,
+                           Task1_Stack, &Task1Buff);
 
-		xTaskCreateStatic(vTask1_toggleLED, "tsk_toggleLEDs", TASK1_STACK_SIZE,
-		NULL,
-		TASK1_PRIO, Task1_Stack, &Task1Buff);
+        xTaskCreateStatic (vTask_HandlerInpCapture, "tsk_IC_Hndlr", TASK2_STACK_SIZE, NULL,
+                           TASK2_PRIO, Task2_Stack, &Task2Buff);
 
-		xTaskCreateStatic(vTask_HandlerInpCapture, "tsk_IC_Hndlr",
-		TASK2_STACK_SIZE,
-		NULL,
-		TASK2_PRIO, Task2_Stack, &Task2Buff);
+        //		xTaskCreateStatic(vTask_DisplayDistance, "tsk_Disp_Dist",
+        //		TASK3_STACK_SIZE,
+        //		NULL, TASK3_PRIO, Task3_Stack, &Task3Buff);
 
-//		xTaskCreateStatic(vTask_DisplayDistance, "tsk_Disp_Dist",
-//		TASK3_STACK_SIZE,
-//		NULL, TASK3_PRIO, Task3_Stack, &Task3Buff);
 
-		xTaskCreateStatic(vTask_parseTime, "tsk_Parse_Time",
-		TASK4_STACK_SIZE,
-		NULL, TASK4_PRIO, Task4_Stack, &Task4Buff);
+        xTaskCreateStatic (vTask_parseTime, "tsk_Parse_Time", TASK4_STACK_SIZE, NULL, TASK4_PRIO,
+                           Task4_Stack, &Task4Buff);
 
-		xTaskCreateStatic(vTask_DispTimeandDist, "tsk_Disp_Time",
-		TASK5_STACK_SIZE,
-		NULL, TASK5_PRIO, Task5_Stack, &Task5Buff);
+        xTaskCreateStatic (vTask_DispTimeandDist, "tsk_Disp_Time", TASK5_STACK_SIZE, NULL,
+                           TASK5_PRIO, Task5_Stack, &Task5Buff);
 
-		USART_TX_string("Starting scheduler...\r\n");
+        USART_TX_string ("Starting scheduler...\r\n");
 
-		vTaskStartScheduler();  // should never return
-	}
+        vTaskStartScheduler (); // should never return
+    }
 
-	while (1)
-	{
-	}
+    while (1)
+    {
+    }
 }
 
 /*DMA IRQ HANDLER*/
-static char gps_string[GPS_BUFFER_SIZE+1] = { 0 };
-void DMA2_Stream2_IRQHandler(void)
+static char gps_string[GPS_BUFFER_SIZE + 1] = { 0 };
+void DMA2_Stream2_IRQHandler (void)
 {
+    char *time_buf_ptr;
 
-	char *time_buf_ptr;
+    time_buf_ptr = gps_string;
 
-	time_buf_ptr = gps_string;
+    static BaseType_t xHigherPriorityTaskWoken;
 
-	static BaseType_t xHigherPriorityTaskWoken;
+    xHigherPriorityTaskWoken = pdFALSE;
 
-	xHigherPriorityTaskWoken = pdFALSE;
+    if (DMA_GetITStatus (DMA2_USART6_STREAM, DMA_IT_TCIF2) != RESET)
+    {
+        GPIO_ToggleBits (GPIOD, GPIO_Pin_15); /* Toggles Blue LED on board*/
 
-	if (DMA_GetITStatus(DMA2_USART6_STREAM, DMA_IT_TCIF2) != RESET)
-	{
-		GPIO_ToggleBits(GPIOD, GPIO_Pin_15); /* Toggles Blue LED on board*/
+        memcpy (gps_string, DMA_RX_Buffer, DMA_RX_BUFFER_SIZE);
 
-		memcpy(gps_string, DMA_RX_Buffer, DMA_RX_BUFFER_SIZE);
+        DMA_ClearITPendingBit (DMA2_USART6_STREAM, DMA_IT_TCIF2);
+        DMA_ClearITPendingBit (DMA2_USART6_STREAM, DMA_IT_HTIF2);
+        DMA_ClearITPendingBit (DMA2_USART6_STREAM, DMA_IT_FEIF2);
+        DMA_ClearITPendingBit (DMA2_USART6_STREAM, DMA_IT_DMEIF2);
+        DMA_ClearITPendingBit (DMA2_USART6_STREAM, DMA_IT_TEIF2);
 
-		DMA_ClearITPendingBit(DMA2_USART6_STREAM, DMA_IT_TCIF2);
-		DMA_ClearITPendingBit(DMA2_USART6_STREAM, DMA_IT_HTIF2);
-		DMA_ClearITPendingBit(DMA2_USART6_STREAM, DMA_IT_FEIF2);
-		DMA_ClearITPendingBit(DMA2_USART6_STREAM, DMA_IT_DMEIF2);
-		DMA_ClearITPendingBit(DMA2_USART6_STREAM, DMA_IT_TEIF2);
+        /* Pass the gps buffer to handler task  */
+        xQueueSendFromISR (xQueueTimeBuff, &time_buf_ptr, &xHigherPriorityTaskWoken);
 
-		/* Pass the gps buffer to handler task  */
-		xQueueSendFromISR(xQueueTimeBuff, &time_buf_ptr,
-				&xHigherPriorityTaskWoken);
-
-		xSemaphoreGiveFromISR(xBinarySemaphore_DMA, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-
-	}
-
+        xSemaphoreGiveFromISR (xBinarySemaphore_DMA, &xHigherPriorityTaskWoken);
+        portYIELD_FROM_ISR (xHigherPriorityTaskWoken);
+    }
 }
 
-void TIM1_CC_IRQHandler(void)
+void TIM1_CC_IRQHandler (void)
 {
-	static timestamp_t pulse;
+    static timestamp_t pulse;
 
+    static BaseType_t xHigherPriorityTaskWoken;
+    xHigherPriorityTaskWoken = pdFALSE;
 
+    if ((TIM_GetITStatus (TIM1, TIM_IT_CC1)) != RESET)
+    {
+        switch (pulse.next_edge)
+        {
+        case e_initial:
+            pulse.rising_tick = TIM_GetCapture1 (TIM1);
+            pulse.next_edge   = e_falling;
+            break;
 
-	static BaseType_t xHigherPriorityTaskWoken;
-	xHigherPriorityTaskWoken = pdFALSE;
+        case e_rising:
 
-	if ((TIM_GetITStatus(TIM1, TIM_IT_CC1)) != RESET)
-	{
+            pulse.rising_tick  = TIM_GetCapture1 (TIM1);
+            pulse.current_edge = e_rising;
+            pulse.next_edge    = e_falling;
+            break;
 
-		switch (pulse.next_edge)
-		{
-		case e_initial:
-			pulse.rising_tick = TIM_GetCapture1(TIM1);
-			pulse.next_edge = e_falling;
-			break;
+        case e_falling:
+            pulse.falling_tick = TIM_GetCapture1 (TIM1);
+            TIM1->CCR1         = 0;
+            pulse.current_edge = e_falling;
+            pulse.next_edge    = e_rising;
 
-		case e_rising:
+            break;
 
-			pulse.rising_tick = TIM_GetCapture1(TIM1);
-			pulse.current_edge = e_rising;
-			pulse.next_edge = e_falling;
-			break;
+        default:
+            break;
+        }
 
-		case e_falling:
-			pulse.falling_tick = TIM_GetCapture1(TIM1);
-			TIM1->CCR1 = 0;
-			pulse.current_edge = e_falling;
-			pulse.next_edge = e_rising;
+        if (pulse.current_edge == e_falling)
+        {
+            if (pulse.falling_tick > pulse.rising_tick)
+                pulse.difference = (pulse.falling_tick - pulse.rising_tick);
+            else
+            {
+                TIM1->CCR1 = 0;
+            }
+        }
 
-			break;
+        /* Pass the pulse structure to handler task  */
+        xQueueSendFromISR (xQueueTimeStamp, &pulse, &xHigherPriorityTaskWoken);
 
-		default:
-			break;
+        /* Give the semaphore to handler task */
+        xSemaphoreGiveFromISR (xBinarySemaphore_InpCap, &xHigherPriorityTaskWoken);
 
-		}
-
-		if (pulse.current_edge == e_falling)
-		{
-			if (pulse.falling_tick > pulse.rising_tick)
-				pulse.difference = (pulse.falling_tick - pulse.rising_tick);
-			else
-			{
-				TIM1->CCR1 = 0;
-			}
-		}
-
-		/* Pass the pulse structure to handler task  */
-		xQueueSendFromISR(xQueueTimeStamp, &pulse, &xHigherPriorityTaskWoken);
-
-		/* Give the semaphore to handler task */
-		xSemaphoreGiveFromISR(xBinarySemaphore_InpCap,
-				&xHigherPriorityTaskWoken);
-
-		TIM_ClearITPendingBit(TIM1, TIM_IT_CC1);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-
-	}
-
-
+        TIM_ClearITPendingBit (TIM1, TIM_IT_CC1);
+        portYIELD_FROM_ISR (xHigherPriorityTaskWoken);
+    }
 }
 
-void vApplicationTickHook(void)
+void vApplicationTickHook (void)
 {
 }
 
@@ -470,11 +436,11 @@ void vApplicationTickHook(void)
  FreeRTOSConfig.h, and the xPortGetFreeHeapSize() API function can be used
  to query the size of free heap space that remains (although it does not
  provide information on how the remaining heap might be fragmented). */
-void vApplicationMallocFailedHook(void)
+void vApplicationMallocFailedHook (void)
 {
-	taskDISABLE_INTERRUPTS();
-	for (;;)
-		;
+    taskDISABLE_INTERRUPTS ();
+    for (;;)
+        ;
 }
 
 /* vApplicationIdleHook() will only be called if configUSE_IDLE_HOOK is set
@@ -486,20 +452,20 @@ void vApplicationMallocFailedHook(void)
  important that vApplicationIdleHook() is permitted to return to its calling
  function, because it is the responsibility of the idle task to clean up
  memory allocated by the kernel to any task that has since been deleted. */
-void vApplicationIdleHook(void)
+void vApplicationIdleHook (void)
 {
 }
 
-void vApplicationStackOverflowHook(xTaskHandle pxTask, signed char *pcTaskName)
+void vApplicationStackOverflowHook (xTaskHandle pxTask, signed char *pcTaskName)
 {
-	(void) pcTaskName;
-	(void) pxTask;
-	/* Run time stack overflow checking is performed if
-	 configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2.  This hook
-	 function is called if a stack overflow is detected. */
-	taskDISABLE_INTERRUPTS();
-	for (;;)
-		;
+    (void)pcTaskName;
+    (void)pxTask;
+    /* Run time stack overflow checking is performed if
+     configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2.  This hook
+     function is called if a stack overflow is detected. */
+    taskDISABLE_INTERRUPTS ();
+    for (;;)
+        ;
 }
 
 StaticTask_t xIdleTaskTCB CCM_RAM;
@@ -508,20 +474,21 @@ StackType_t uxIdleTaskStack[configMINIMAL_STACK_SIZE] CCM_RAM;
 /* configUSE_STATIC_ALLOCATION is set to 1, so the application must provide an
  implementation of vApplicationGetIdleTaskMemory() to provide the memory that is
  used by the Idle task. */
-void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
-		StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize)
+void vApplicationGetIdleTaskMemory (StaticTask_t **ppxIdleTaskTCBBuffer,
+                                    StackType_t **ppxIdleTaskStackBuffer,
+                                    uint32_t *pulIdleTaskStackSize)
 {
-	/* Pass out a pointer to the StaticTask_t structure in which the Idle task's
-	 state will be stored. */
-	*ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
+    /* Pass out a pointer to the StaticTask_t structure in which the Idle task's
+     state will be stored. */
+    *ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
 
-	/* Pass out the array that will be used as the Idle task's stack. */
-	*ppxIdleTaskStackBuffer = uxIdleTaskStack;
+    /* Pass out the array that will be used as the Idle task's stack. */
+    *ppxIdleTaskStackBuffer = uxIdleTaskStack;
 
-	/* Pass out the size of the array pointed to by *ppxIdleTaskStackBuffer.
-	 Note that, as the array is necessarily of type StackType_t,
-	 configMINIMAL_STACK_SIZE is specified in words, not bytes. */
-	*pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
+    /* Pass out the size of the array pointed to by *ppxIdleTaskStackBuffer.
+     Note that, as the array is necessarily of type StackType_t,
+     configMINIMAL_STACK_SIZE is specified in words, not bytes. */
+    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
 }
 
 static StaticTask_t xTimerTaskTCB CCM_RAM;
@@ -530,11 +497,11 @@ static StackType_t uxTimerTaskStack[configTIMER_TASK_STACK_DEPTH] CCM_RAM;
 /* configUSE_STATIC_ALLOCATION and configUSE_TIMERS are both set to 1, so the
  application must provide an implementation of vApplicationGetTimerTaskMemory()
  to provide the memory that is used by the Timer service task. */
-void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
-		StackType_t **ppxTimerTaskStackBuffer, uint32_t *pulTimerTaskStackSize)
+void vApplicationGetTimerTaskMemory (StaticTask_t **ppxTimerTaskTCBBuffer,
+                                     StackType_t **ppxTimerTaskStackBuffer,
+                                     uint32_t *pulTimerTaskStackSize)
 {
-	*ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
-	*ppxTimerTaskStackBuffer = uxTimerTaskStack;
-	*pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
+    *ppxTimerTaskTCBBuffer   = &xTimerTaskTCB;
+    *ppxTimerTaskStackBuffer = uxTimerTaskStack;
+    *pulTimerTaskStackSize   = configTIMER_TASK_STACK_DEPTH;
 }
-
